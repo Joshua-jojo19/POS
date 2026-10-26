@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>POS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 16px; }
+    .product { display: flex; justify-content: space-between; align-items: center;
+               border: 1px solid #ddd; padding: 12px; margin-bottom: 8px; border-radius: 6px; }
+    .product button { padding: 6px 14px; cursor: pointer; }
+    #cart { margin-top: 24px; border-top: 2px solid #333; padding-top: 12px; }
+    .cart-item { display: flex; justify-content: space-between; margin-bottom: 6px; }
+    #total { font-weight: bold; font-size: 1.2em; margin-top: 8px; }
+    #checkout { margin-top: 12px; padding: 10px 20px; font-size: 1em; cursor: pointer; }
+    #message { margin-top: 12px; color: green; }
+  </style>
+</head>
+<body>
+  <h1>POS</h1>
+  <div id="products">Loading...</div>
+
+  <div id="cart">
+    <h2>Cart</h2>
+    <div id="cart-items"></div>
+    <div id="total">Total: $0.00</div>
+    <button id="checkout">Checkout</button>
+    <div id="message"></div>
+  </div>
+
+  <script>
+    const API = "https://your-worker-name.your-subdomain.workers.dev";
+    let cart = [];
+
+    async function loadProducts() {
+      const res = await fetch(API + "/api/products");
+      const products = await res.json();
+      const box = document.getElementById("products");
+      box.innerHTML = "";
+      products.forEach(p => {
+        const div = document.createElement("div");
+        div.className = "product";
+        div.innerHTML = `<span>${p.name} — $${p.price} (stock: ${p.stock})</span>`;
+        const btn = document.createElement("button");
+        btn.textContent = "Add";
+        btn.onclick = () => addToCart(p);
+        div.appendChild(btn);
+        box.appendChild(div);
+      });
+    }
+
+    function addToCart(product) {
+      const existing = cart.find(i => i.id === product.id);
+      if (existing) existing.qty++;
+      else cart.push({ id: product.id, name: product.name, price: product.price, qty: 1 });
+      renderCart();
+    }
+
+    function renderCart() {
+      const box = document.getElementById("cart-items");
+      box.innerHTML = "";
+      let total = 0;
+      cart.forEach(item => {
+        total += item.price * item.qty;
+        const div = document.createElement("div");
+        div.className = "cart-item";
+        div.innerHTML = `<span>${item.name} x${item.qty}</span><span>$${(item.price * item.qty).toFixed(2)}</span>`;
+        box.appendChild(div);
+      });
+      document.getElementById("total").textContent = "Total: $" + total.toFixed(2);
+    }
+
+    document.getElementById("checkout").onclick = async () => {
+      if (cart.length === 0) return;
+      const msg = document.getElementById("message");
+      msg.textContent = "";
+
+      for (const item of cart) {
+        const res = await fetch(API + "/api/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: item.id, quantity: item.qty })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          msg.style.color = "red";
+          msg.textContent = "Error: " + (data.error || "checkout failed");
+          return;
+        }
+      }
+
+      msg.style.color = "green";
+      msg.textContent = "Checkout complete!";
+      cart = [];
+      renderCart();
+      loadProducts();
+    };
+
+    loadProducts();
+  </script>
+</body>
+</html>
